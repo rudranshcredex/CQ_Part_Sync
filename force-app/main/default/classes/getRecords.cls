@@ -2,12 +2,12 @@
 * @description       : 
 * @author            : Rudransh Shukla
 * @group             : 
-* @last modified on  : 12-15-2023
+* @last modified on  : 12-18-2023
 * @last modified by  : ChangeMeIn@UserSettingsUnder.SFDoc
 **/
 public with sharing class getRecords {
     @AuraEnabled(cacheable=true)
-    public static void  getRecordsMethod() {
+    public static boolean  getRecordsMethod() {
         
         Boolean hasCustomPermission = FeatureManagement.checkPermission('Access_Sync_Service');
         
@@ -24,6 +24,11 @@ public with sharing class getRecords {
             
             HttpResponse response = http.send(request);
             List<Object> results = new List<Object>();
+
+            boolean alreadyExists = false;
+            if([select count() from SQX_Part__c]>0){
+                alreadyExists = true;
+            }
             
             if (response.getStatusCode() == 200) {
                 results = (List<Object>) JSON.deserializeUntyped(response.getBody());
@@ -31,17 +36,22 @@ public with sharing class getRecords {
             }
             
             Integer totalQuantityShipped = 0; 
-            id lowId = [select id from account where name='Low Volume' limit 1].id;
-            id highId = [select id from account where name='High Volume' limit 1].id;
+            Id lowId;
+            Id highId;
+            List<Account> lowVolumeAccounts = [SELECT Id FROM Account WHERE Name = 'Low Volume' LIMIT 1];
+            if (!lowVolumeAccounts.isEmpty()) {
+                lowId = lowVolumeAccounts[0].Id;
+            }
+            List<Account> highVolumeAccounts = [SELECT Id FROM Account WHERE Name = 'High Volume' LIMIT 1];
+            if (!highVolumeAccounts.isEmpty()) {
+                highId = highVolumeAccounts[0].Id;
+            }
+
             
             list<SQX_Part__c> cqPartList = new list<SQX_Part__c>();
             
-            boolean alreadyExists = false;
-            if([select count() from SQX_Part__c]>0){
-                alreadyExists = true;
-            }
-            
-            
+           
+            if(!alreadyExists){
                 for (Object result : results) {
                     Map<String, Object> record = (Map<String, Object>) result;
                     System.debug('record------->' + record);
@@ -76,13 +86,22 @@ public with sharing class getRecords {
                             
                             system.debug('insert low');
                         }
-                    }
-                    
+                    }   
                 }
-            if(!cqPartList.isEmpty() && !alreadyExists){
-                insert cqPartList;
-                system.debug('end');
+                if(!cqPartList.isEmpty()){
+                    insert cqPartList;
+                    system.debug('end');
+                   
+                }
+
             }
+            else {
+                system.debug('already Exists');
+                
+            }
+        return alreadyExists;
+            
         }
+        return false;
     }
 }
